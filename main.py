@@ -1,6 +1,7 @@
-"""WorldQuant Brain 批量 Alpha 生成系统"""
+"""WorldQuant Brain 批量 Alpha 生成系统 - 支持智能断点续传"""
 
 import os
+import sys
 
 from brain_batch_alpha import BrainBatchAlpha
 from dataset_config import get_dataset_by_index, get_dataset_list
@@ -44,19 +45,33 @@ def submit_alpha_ids(brain, num_to_submit=2):
 def main():
     """主程序入口"""
     try:
+        # 检查命令行参数
+        if len(sys.argv) > 1 and sys.argv[1] == '--clear-resume':
+            brain = BrainBatchAlpha()
+            brain.clear_resume_data()
+            return
+
         print("🚀 启动 WorldQuant Brain 批量 Alpha 生成系统")
+        print("🧠 智能参数配置 + 断点续传功能已启用")
+
+        # 显示断点续传状态
+        brain = BrainBatchAlpha()
+        stats = brain.get_resume_stats()
+        if stats['total_tested'] > 0:
+            print(f"📊 断点续传状态: 已有 {stats['total_tested']} 个测试记录")
+            print("💡 提示: 程序将自动跳过已测试的Alpha表达式")
+            print("🗑️ 如需重新开始，请运行: python main.py --clear-resume")
 
         print("\n📋 请选择运行模式:")
         print("1: 自动模式 (测试并自动提交 2 个合格 Alpha)")
         print("2: 仅测试模式 (测试并保存合格 Alpha ID)")
         print("3: 仅提交模式 (提交已保存的合格 Alpha ID)")
+        print("4: 清除断点续传记录")
 
-        mode = int(input("\n请选择模式 (1-3): "))
-        if mode not in [1, 2, 3]:
+        mode = int(input("\n请选择模式 (1-4): "))
+        if mode not in [1, 2, 3, 4]:
             print("❌ 无效的模式选择")
             return
-
-        brain = BrainBatchAlpha()
 
         if mode in [1, 2]:
             print("\n📊 可用数据集列表:")
@@ -78,10 +93,17 @@ def main():
                 print("❌ 无效的策略模式")
                 return
 
-            results = brain.simulate_alphas(None, strategy_mode, dataset_name)
+            print("\n🔄 开始Alpha模拟（支持Ctrl+C中断和断点续传）...")
+            try:
+                results = brain.simulate_alphas(None, strategy_mode, dataset_name)
 
-            if mode == 1:
-                submit_alpha_ids(brain, 2)
+                if mode == 1:
+                    submit_alpha_ids(brain, 2)
+
+            except KeyboardInterrupt:
+                print("\n⚠️ 用户中断操作")
+                print("💾 进度已自动保存，下次运行将从中断点继续")
+                return
 
         elif mode == 3:
             num_to_submit = int(input("\n请输入要提交的 Alpha 数量: "))
@@ -90,6 +112,15 @@ def main():
                 return
             submit_alpha_ids(brain, num_to_submit)
 
+        elif mode == 4:
+            confirm = input("\n⚠️ 确认清除所有断点续传记录？(y/N): ")
+            if confirm.lower() == 'y':
+                brain.clear_resume_data()
+            else:
+                print("❌ 操作已取消")
+
+    except KeyboardInterrupt:
+        print("\n⚠️ 程序被用户中断")
     except Exception as e:
         print(f"❌ 程序运行出错: {str(e)}")
 
